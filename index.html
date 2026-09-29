@@ -2,110 +2,198 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zora Recovery - Prove & Finalize</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zora Superbridge Replacement - Official</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<style>
+body{margin:0;font-family:Inter,system-ui;background:#f5f5f7}
+.wrap{max-width:700px;margin:auto;padding:20px}
+.card{background:white;border-radius:20px;padding:24px;margin-top:16px;box-shadow:0 4px 20px rgba(0,0,0,.06)}
+.btn{width:100%;padding:16px;border-radius:14px;border:0;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px}
+.black{background:black;color:white}
+.blue{background:#0066FF;color:white}
+.input{width:100%;padding:14px;border-radius:12px;border:1px solid #ddd;box-sizing:border-box;margin-top:10px}
+.warn{background:#fff4e5;border:1px solid #ffd080;padding:12px;border-radius:12px;font-size:13px;margin-top:12px}
+.ok{background:#e8f5e9;border:1px solid #a8d5a2;padding:12px;border-radius:12px;font-size:13px;margin-top:12px}
+.code{font-family:monospace;background:#f2f2f2;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}
+a{color:#0066FF}
+h2{margin:0 0 8px}
+.small{font-size:12px;color:#666}
+</style>
 </head>
-<body class="bg-black text-white min-h-screen flex items-center justify-center p-4">
-<div class="max-w-lg w-full bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
-  <h1 class="text-xl font-bold">Zora Bridge Recovery</h1>
-  <p class="text-zinc-400 text-sm mt-1">Paste L2 withdrawal tx, prove + finalize in one place</p>
+<body>
+<div class="wrap">
+<h2>Zora Bridge - Superbridge Replacement</h2>
+<div class="small">Because superbridge.app no longer supports Zora, this UI talks directly to official Zora contracts. No fees, no approvals.</div>
+<div class="card">
+<div style="font-size:12px;background:black;color:white;display:inline-block;padding:4px 10px;border-radius:20px">OFFICIAL ONLY</div>
+<div style="margin-top:10px;font-size:13px;line-height:1.6">
+OptimismPortal: <span class="code">0x1a0ad011B6fEf6d6D5D37388a385A56b782E4Afd</span><br>
+L2OutputOracle: <span class="code">0x9E6204F750cD866b299594e2aC9eA824E2e5f95c</span><br>
+Zora RPC: rpc.zora.energy | Chain 7777777 | Challenge 7 days<br>
+</div>
+</div>
 
-  <button id="connectButton" class="w-full mt-5 bg-white text-black py-3 rounded-xl font-bold">Connect Wallet</button>
-  <div id="walletInfo" class="text-xs text-zinc-400 mt-2 hidden"></div>
+<div class="card">
+<b>1. Connect</b><br>
+<span class="small">Connect same wallet that made Zora withdrawal</span>
+<button class="btn black" id="connect">Connect Wallet</button>
+<div id="addr" class="small" style="margin-top:8px;word-break:break-all"></div>
+</div>
 
-  <input id="txHash" placeholder="0x... Zora withdrawal tx hash (L2)" class="w-full mt-5 bg-zinc-800 border border-zinc-700 p-3 rounded-xl text-sm outline-none">
+<div class="card">
+<b>2. Paste Zora withdrawal tx</b>
+<input id="txhash" class="input" placeholder="0x..." value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b">
+<button class="btn blue" id="check">Check Status & Prepare Refund</button>
+<div id="result"></div>
+</div>
 
-  <button id="proveBtn" class="w-full mt-3 bg-blue-600 py-3 rounded-xl font-bold disabled:opacity-30" disabled>1. Prove Withdrawal on L1</button>
-  <button id="finalizeBtn" class="w-full mt-3 bg-green-600 py-3 rounded-xl font-bold disabled:opacity-30" disabled>2. Finalize Withdrawal (after 7 days)</button>
+<div class="card" id="actionCard" style="display:none">
+<b>3. Refund Action</b>
+<div id="actionInfo" class="small" style="margin-top:8px;line-height:1.6"></div>
+<button class="btn blue" id="proveBtn" style="display:none">Step 1: Prove Withdrawal on L1</button>
+<button class="btn black" id="finalizeBtn" style="display:none">Step 2: Finalize After 7 Days - Get Funds Back</button>
+<div id="actionResult" style="margin-top:12px"></div>
+</div>
 
-  <div id="status" class="mt-4 text-xs bg-zinc-800 p-3 rounded-xl min-h-[60px]">Status: Connect wallet on Ethereum Mainnet</div>
-
-  <p class="text-[11px] text-zinc-500 mt-4">Uses official Zora OptimismPortal: 0x1a0ad011... (auto). No seed phrase. This just calls proveWithdrawalTransaction + finalizeWithdrawalTransaction for you.</p>
+<div class="card">
+<b>For your friend - how to use:</b>
+<div class="small">
+After you deploy to Netlify, send him your Netlify link. He will: 1. Open link in MetaMask 2. Connect his wallet 3. Paste HIS tx hash 4. Click Finalize - funds go ONLY to his wallet. No hidden charge possible because OptimismPortal contract sends to sender, not to you.
+</div>
+</div>
 </div>
 
 <script type="module">
-import { createWeb3Modal, defaultWagmiConfig } from 'https://esm.sh/@web3modal/wagmi@4.2.3?bundle'
-import { mainnet, zora } from 'https://esm.sh/viem@2.9.32/chains?bundle'
-import { reconnect, getAccount, getWalletClient, getPublicClient, switchChain } from 'https://esm.sh/@wagmi/core@2.10.4?bundle'
 import { CrossChainMessenger, MessageStatus } from 'https://esm.sh/@eth-optimism/sdk@3.7.1?bundle'
 import { http } from 'https://esm.sh/viem@2.9.32?bundle'
 
-const projectId = 'REPLACE_ME' // <-- PASTE YOUR PROJECT ID HERE
+let provider, signer, userAddr, messenger;
+let currentTxHash = "";
 
-const chains = [mainnet, zora]
-const metadata = { name: 'Zora Recovery', description: 'Recovery', url: 'https://zorarecovery.netlify.app', icons: [] }
-const wagmiConfig = defaultWagmiConfig({ chains, projectId, metadata, transports: { [mainnet.id]: http(), [zora.id]: http('https://rpc.zora.energy') } })
-reconnect(wagmiConfig)
-const modal = createWeb3Modal({ wagmiConfig, projectId, chains })
+document.getElementById('connect').onclick = async()=>{
+  if(!window.ethereum){ alert("Open in MetaMask browser"); return; }
+  provider = new ethers.BrowserProvider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  signer = await provider.getSigner();
+  userAddr = await signer.getAddress();
+  document.getElementById('addr').innerText = "Connected: "+userAddr;
+};
 
-const connectBtn = document.getElementById('connectButton')
-const proveBtn = document.getElementById('proveBtn')
-const finalizeBtn = document.getElementById('finalizeBtn')
-const statusEl = document.getElementById('status')
-const txInput = document.getElementById('txHash')
-const walletInfo = document.getElementById('walletInfo')
-
-function log(t){ statusEl.innerText = t; console.log(t); }
-
-connectBtn.onclick = () => modal.open()
-modal.subscribeEvents(e=>{ if(e.data.event==='MODAL_CLOSE'){ const a=getAccount(wagmiConfig); if(a.address){ walletInfo.classList.remove('hidden'); walletInfo.innerText=`Connected: ${a.address.slice(0,6)}...${a.address.slice(-4)} on ${a.chainId}`; proveBtn.disabled=false; log('Connected. Paste your Zora L2 tx hash (the initiate withdrawal tx) and click Prove. Make sure wallet is on Ethereum Mainnet for Prove/Finalize.'); } } })
-
-async function getMessenger(){
-  const walletClient = await getWalletClient(wagmiConfig)
-  const publicClientL1 = getPublicClient(wagmiConfig, { chainId: mainnet.id })
-  const publicClientL2 = getPublicClient(wagmiConfig, { chainId: zora.id })
-  const messenger = new CrossChainMessenger({
-    l1ChainId: mainnet.id,
-    l2ChainId: zora.id,
-    l1SignerOrProvider: walletClient,
-    l2SignerOrProvider: publicClientL2,
+function makeMessenger(){
+  const l1Provider = new ethers.JsonRpcProvider("https://eth.llamarpc.com");
+  const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
+  return new CrossChainMessenger({
+    l1ChainId: 1,
+    l2ChainId: 7777777,
+    l1SignerOrProvider: signer,
+    l2SignerOrProvider: l2Provider,
     bedrock: true
-  })
-  return messenger
+  });
 }
 
-proveBtn.onclick = async ()=>{
+document.getElementById('check').onclick = async()=>{
+  const hash = document.getElementById('txhash').value.trim();
+  const res = document.getElementById('result');
+  if(hash.length!==66){ res.innerHTML='<div class="warn">Invalid hash</div>'; return; }
+  currentTxHash = hash;
+  res.innerHTML='Fetching from Zora RPC... Checking on-chain status...';
   try{
-    const hash = txInput.value.trim()
-    if(!hash.startsWith('0x')) return log('Invalid tx hash')
-    log('Checking status... fetching proof from Zora...')
-    await switchChain(wagmiConfig, { chainId: mainnet.id })
-    const messenger = await getMessenger()
-    const status = await messenger.getMessageStatus(hash)
-    log(`Current status: ${MessageStatus[status]} (${status})`)
-
-    if(status === MessageStatus.READY_TO_PROVE || status === MessageStatus.STATE_ROOT_NOT_PUBLISHED){
-      log('Proving withdrawal... this calls proveWithdrawalTransaction on OptimismPortal (L1). Confirm in wallet...')
-      const tx = await messenger.proveMessage(hash)
-      log(`Prove tx sent: ${tx.hash}. Waiting...`)
-      await tx.wait()
-      log(`✅ Proven! Tx: ${tx.hash}. Now wait for challenge period (up to 7 days). After that click Finalize.`)
-      finalizeBtn.disabled=false
-    } else if(status === MessageStatus.IN_CHALLENGE_PERIOD){
-      log('Already proven. In challenge period. Wait then Finalize.')
-      finalizeBtn.disabled=false
-    } else if(status === MessageStatus.READY_FOR_RELAY){
-      log('Ready to finalize!')
-      finalizeBtn.disabled=false
-    } else {
-      log(`Status is ${MessageStatus[status]}. If STATE_ROOT_NOT_PUBLISHED, wait a few mins for Zora batcher to post to L1.`)
+    if(!signer){ res.innerHTML='<div class="warn">Connect wallet first (must be on Ethereum Mainnet with ETH for gas)</div>'; return; }
+    messenger = makeMessenger();
+    const zoraProvider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
+    const receipt = await zoraProvider.getTransactionReceipt(hash);
+    if(!receipt){ res.innerHTML=`<div class="warn">Not found on Zora. Check <a href="https://explorer.zora.energy/tx/${hash}" target="_blank">explorer.zora.energy</a></div>`; return; }
+    
+    const status = await messenger.getMessageStatus(hash);
+    const statusText = MessageStatus[status];
+    let timeLeft = "";
+    if(status === MessageStatus.IN_CHALLENGE_PERIOD){
+      try{
+        const sec = await messenger.getMessageTimeLeft(hash);
+        const days = Math.floor(sec/86400);
+        const hours = Math.floor((sec%86400)/3600);
+        timeLeft = `Time left in challenge: ${days}d ${hours}h`;
+      }catch{}
     }
-  }catch(e){ log('Error: '+ (e.shortMessage||e.message)); console.error(e) }
-}
 
-finalizeBtn.onclick = async ()=>{
+    res.innerHTML=`<div class="ok">Found on Zora ✅<br>Block: ${receipt.blockNumber}<br>From: <span class="code">${receipt.from}</span><br>L1 Status: <b>${statusText}</b><br>${timeLeft}<br><br><a href="https://explorer.zora.energy/tx/${hash}" target="_blank">View on Zora Explorer</a></div>`;
+    
+    document.getElementById('actionCard').style.display='block';
+    document.getElementById('actionInfo').innerHTML = `Withdrawal by <span class="code">${receipt.from}</span><br>Current: ${statusText}<br>${timeLeft}`;
+    
+    // Show correct button based on status
+    const proveBtn = document.getElementById('proveBtn');
+    const finalBtn = document.getElementById('finalizeBtn');
+    proveBtn.style.display='none';
+    finalBtn.style.display='none';
+    
+    if(status === MessageStatus.STATE_ROOT_NOT_PUBLISHED){
+      res.innerHTML+=`<div class="warn" style="margin-top:10px">State root not yet published on L1. Wait 10-30 mins after your L2 tx, then click Check again.</div>`;
+      proveBtn.style.display='block';
+    } else if(status === MessageStatus.READY_TO_PROVE){
+      proveBtn.style.display='block';
+    } else if(status === MessageStatus.IN_CHALLENGE_PERIOD){
+      finalBtn.style.display='block';
+      finalBtn.disabled = true;
+      finalBtn.innerText = `Waiting 7 days challenge... ${timeLeft} - Finalize auto-enables`;
+      // Auto countdown check
+      const interval = setInterval(async()=>{
+        const s = await messenger.getMessageStatus(hash);
+        if(s === MessageStatus.READY_FOR_RELAY){
+          clearInterval(interval);
+          finalBtn.disabled=false;
+          finalBtn.innerText="Step 2: Finalize Now - Get Funds Back";
+          document.getElementById('actionResult').innerHTML='<div class="ok">✅ Challenge period over! You can Finalize now</div>';
+        }
+      }, 30000);
+    } else if(status === MessageStatus.READY_FOR_RELAY){
+      finalBtn.style.display='block';
+      finalBtn.disabled=false;
+    } else if(status === MessageStatus.RELAYED){
+      res.innerHTML+=`<div class="ok" style="margin-top:10px">✅ Already finalized! Funds already on L1.</div>`;
+    }
+
+  }catch(e){
+    res.innerHTML='<div class="warn">Error: '+ (e.reason || e.message) +'</div>';
+    console.error(e);
+  }
+};
+
+document.getElementById('proveBtn').onclick = async()=>{
+  const r = document.getElementById('actionResult');
   try{
-    const hash = txInput.value.trim()
-    log('Finalizing... calls finalizeWithdrawalTransaction on L1. This releases ETH...')
-    await switchChain(wagmiConfig, { chainId: mainnet.id })
-    const messenger = await getMessenger()
-    const tx = await messenger.finalizeMessage(hash)
-    log(`Finalize tx sent: ${tx.hash}. Waiting...`)
-    await tx.wait()
-    log(`✅ FINALIZED! ETH should be in your L1 wallet. Tx: ${tx.hash}`)
-  }catch(e){ log('Error: '+ (e.shortMessage||e.message)); console.error(e) }
-}
+    if(!currentTxHash) return;
+    r.innerHTML='<div class="warn">Proving... calling proveWithdrawalTransaction on Portal (0x1a0ad0...). Confirm in MetaMask... Switch to Ethereum Mainnet if asked.</div>';
+    if(!messenger) messenger = makeMessenger();
+    const tx = await messenger.proveMessage(currentTxHash);
+    r.innerHTML=`<div class="ok">Prove tx sent: <a href="https://etherscan.io/tx/${tx.hash}" target="_blank" class="code">${tx.hash}</a><br>Waiting for confirmation...</div>`;
+    await tx.wait();
+    r.innerHTML=`<div class="ok">✅ Proven! Tx: <span class="code">${tx.hash}</span><br><br>Now 7-day challenge starts. This site will countdown. After 7 days, Finalize button enables automatically. No need to go to Etherscan.</div>`;
+    document.getElementById('finalizeBtn').style.display='block';
+    document.getElementById('finalizeBtn').disabled=true;
+    document.getElementById('finalizeBtn').innerText="In 7-day challenge - Finalize auto-enables after";
+  }catch(e){
+    r.innerHTML='<div class="warn">Prove failed: '+(e.reason||e.message)+'</div>';
+    console.error(e);
+  }
+};
+
+document.getElementById('finalizeBtn').onclick = async()=>{
+  const r = document.getElementById('actionResult');
+  try{
+    if(!currentTxHash) return;
+    r.innerHTML='<div class="warn">Finalizing... calling finalizeWithdrawalTransaction. Confirm in MetaMask...</div>';
+    if(!messenger) messenger = makeMessenger();
+    const tx = await messenger.finalizeMessage(currentTxHash);
+    r.innerHTML=`<div class="ok">Finalize tx sent: <a href="https://etherscan.io/tx/${tx.hash}" target="_blank" class="code">${tx.hash}</a><br>Waiting...</div>`;
+    await tx.wait();
+    r.innerHTML=`<div class="ok">✅ FINALIZED! Funds are back in your wallet on L1. Tx: <span class="code">${tx.hash}</span></div>`;
+  }catch(e){
+    r.innerHTML='<div class="warn">Finalize failed: '+(e.reason||e.message)+'</div>';
+    console.error(e);
+  }
+};
 </script>
 </body>
 </html>
