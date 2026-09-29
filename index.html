@@ -3,103 +3,137 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Zora Bridge Fix</title>
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
-<!-- Try 3 CDNs - one will load -->
-<script>
-let sdkLoaded = false;
-function loadSDK(src, nextSrc) {
-  const s = document.createElement('script');
-  s.src = src;
-  s.onload = () => { sdkLoaded = true; console.log("SDK loaded from", src); };
-  s.onerror = () => {
-    console.log("Failed", src);
-    if (nextSrc) loadSDK(nextSrc);
-  };
-  document.head.appendChild(s);
-}
-loadSDK("https://cdn.jsdelivr.net/npm/@eth-optimism/sdk@3.7.1/dist/browser.js",
-"https://cdn.jsdelivr.net/npm/@ethereum-optimism/sdk@0.0.0-20231010144554/dist/browser.js");
-</script>
+<title>Zora Recovery - Airtel Fix</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
 <style>
-body{margin:0;font-family:system-ui;background:#f5f5f7}
-.wrap{max-width:700px;margin:auto;padding:20px}
-.card{background:white;border-radius:20px;padding:20px;margin-top:16px}
-.btn{width:100%;padding:16px;border-radius:14px;border:0;font-weight:700;cursor:pointer;margin-top:12px}
+body{margin:0;font-family:-apple-system,system-ui;background:#f5f5f7}
+.wrap{max-width:720px;margin:0 auto;padding:20px}
+.card{background:white;border-radius:20px;padding:20px;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
+.btn{width:100%;padding:16px;border-radius:14px;border:0;font-weight:700;cursor:pointer;margin-top:10px;font-size:15px}
 .black{background:black;color:white}
 .blue{background:#0066FF;color:white}
-.input{width:100%;padding:14px;border-radius:12px;border:1px solid #ddd;box-sizing:border-box;margin-top:10px}
-.warn{background:#fff4e5;padding:12px;border-radius:12px;font-size:13px;margin-top:12px;word-break:break-all}
-.ok{background:#e8f5e9;padding:12px;border-radius:12px;font-size:13px;margin-top:12px;word-break:break-all}
-.small{font-size:12px;color:#666}
+.input{width:100%;padding:14px;border-radius:12px;border:1px solid #ddd;box-sizing:border-box;margin-top:10px;font-size:14px}
+.ok{background:#e8f5e9;padding:12px;border-radius:10px;font-size:13px;margin-top:10px;word-break:break-all}
+.warn{background:#fff4e5;padding:12px;border-radius:10px;font-size:13px;margin-top:10px;word-break:break-all}
+.small{font-size:12px;color:#666;margin-top:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="card"><b>1. Connect</b><br><button class="btn black" id="connect">Connect Wallet</button><div id="addr" class="small"></div></div>
-<div class="card"><b>2. Tx</b><input id="txhash" class="input" value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b"><button class="btn blue" id="check">Check Status</button><div id="result"></div></div>
-<div class="card" id="actionCard" style="display:none"><b>3. Action</b><button class="btn blue" id="proveBtn">Prove on L1 (Mainnet)</button><button class="btn black" id="finalizeBtn">Finalize After 7 Days</button><div id="actionResult"></div></div>
-<div class="small" id="debug" style="margin-top:20px"></div>
+<h2>Zora Recovery - MacBook Airtel</h2>
+<div id="cdnStatus" class="small">Loading SDK...</div>
+<div class="card"><b>1. Connect Wallet (Mainnet)</b><br><button class="btn black" id="connect">Connect MetaMask</button><div id="addr" class="small"></div></div>
+<div class="card"><b>2. Check</b><br><input id="txhash" class="input" value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b"><button class="btn blue" id="check">Check Status</button><div id="result"></div></div>
+<div class="card" id="actionCard" style="display:none"><b>3. Prove / Finalize</b><br><button class="btn blue" id="proveBtn">Prove on L1</button><button class="btn black" id="finalizeBtn">Finalize (after 7 days)</button><div id="actionResult"></div></div>
 </div>
 
 <script>
+// Airtel-proof SDK loader - tries 4 different domains
+const CDNS = [
+  "https://esm.run/@eth-optimism/sdk@3.7.1",
+  "https://cdn.skypack.dev/@eth-optimism/sdk@3.7.1",
+  "https://cdn.jsdelivr.net/npm/@eth-optimism/sdk@3.7.1/dist/browser.js",
+  "https://unpkg.com/@eth-optimism/sdk@3.7.1/dist/browser.js"
+];
+
+async function tryLoadSDK() {
+  const statusEl = document.getElementById('cdnStatus');
+  for (let url of CDNS) {
+    try {
+      statusEl.innerText = "Trying " + url + "...";
+      if (url.endsWith('.js')) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = url;
+          s.onload = res;
+          s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      } else {
+        const mod = await import(url);
+        window.CrossChainMessenger = mod.CrossChainMessenger || mod.default?.CrossChainMessenger;
+        window.optimismSDK = mod;
+      }
+      if (window.CrossChainMessenger || (window.optimismSDK && window.optimismSDK.CrossChainMessenger)) {
+        statusEl.innerText = "SDK loaded from " + url + " ✅";
+        return true;
+      }
+    } catch (e) {
+      console.log("Failed CDN", url, e.message);
+    }
+  }
+  statusEl.innerText = "All CDNs blocked by Airtel. Please turn ON 1.1.1.1 Warp VPN and reload. Download from https://one.one.one.one/";
+  return false;
+}
+
 let signer, currentTxHash = "";
 const ZORA_RPC = "https://rpc.zora.energy";
-document.getElementById('debug').innerText = "Loading SDK from jsdelivr...";
+
+(async () => { await tryLoadSDK(); })();
 
 document.getElementById('connect').onclick = async () => {
   const p = new ethers.BrowserProvider(window.ethereum);
   await p.send("eth_requestAccounts", []);
   signer = await p.getSigner();
   document.getElementById('addr').innerText = await signer.getAddress();
+  try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }); } catch(e){}
 };
 
 document.getElementById('check').onclick = async () => {
   const hash = document.getElementById('txhash').value.trim();
-  const res = document.getElementById('result');
   currentTxHash = hash;
+  const res = document.getElementById('result');
   try {
     const zp = new ethers.JsonRpcProvider(ZORA_RPC);
     const rcpt = await zp.getTransactionReceipt(hash);
-    if (!rcpt) { res.innerHTML = '<div class="warn">Not found</div>'; return; }
-    res.innerHTML = `<div class="ok">Found Block ${rcpt.blockNumber} ✅</div>`;
+    if (!rcpt) { res.innerHTML = '<div class="warn">Tx not found on Zora</div>'; return; }
+    res.innerHTML = `<div class="ok">Found Block ${rcpt.blockNumber} ✅<br>Now click Prove below</div>`;
     document.getElementById('actionCard').style.display = 'block';
   } catch (e) { res.innerHTML = '<div class="warn">'+e.message+'</div>'; }
 };
 
 async function getMessenger() {
-  if (!window.ethereum) throw new Error("No wallet");
   if (!signer) {
     const p = new ethers.BrowserProvider(window.ethereum);
     await p.send("eth_requestAccounts", []);
     signer = await p.getSigner();
   }
   try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }); } catch(e){}
-  
-  // Wait for SDK to load
-  for(let i=0;i<20;i++){
-    const Messenger = (window.optimismSDK && window.optimismSDK.CrossChainMessenger) || window.CrossChainMessenger;
-    if (Messenger) {
-      document.getElementById('debug').innerText = "SDK ready";
-      return new Messenger({
-        l1ChainId: 1, l2ChainId: 7777777,
-        l1SignerOrProvider: signer,
-        l2SignerOrProvider: new ethers.JsonRpcProvider(ZORA_RPC),
-        bedrock: true
-      });
-    }
-    await new Promise(r=>setTimeout(r,500));
-  }
-  throw new Error("SDK still not loaded after 10s. Turn ON VPN (1.1.1.1) or try MTN network, Airtel blocks jsdelivr sometimes. Then reload page.");
+  const Messenger = window.CrossChainMessenger || (window.optimismSDK && window.optimismSDK.CrossChainMessenger);
+  if (!Messenger) throw new Error("SDK not loaded - Turn ON 1.1.1.1 VPN and reload page");
+  return new Messenger({
+    l1ChainId: 1, l2ChainId: 7777777,
+    l1SignerOrProvider: signer,
+    l2SignerOrProvider: new ethers.JsonRpcProvider(ZORA_RPC),
+    bedrock: true
+  });
 }
 
 document.getElementById('proveBtn').onclick = async () => {
   const r = document.getElementById('actionResult');
   try {
-    r.innerHTML = '<div class="warn">Proving... wait for MetaMask pop</div>';
+    r.innerHTML = '<div class="warn">Proving... Confirm in MetaMask on Mainnet</div>';
     const m = await getMessenger();
+    const status = await m.getMessageStatus(currentTxHash);
+    r.innerHTML = `<div class="small">Status: ${status} (1=Ready to Prove, 2=Waiting, 3=Ready to Finalize)</div>`;
     const tx = await m.proveMessage(currentTxHash);
-    r.innerHTML = `<div class="ok">Sent ${tx.hash} waiting...</div>`;
+    r.innerHTML = `<div class="ok">Prove sent: ${tx.hash}<br>Waiting confirmation...</div>`;
     await tx.wait();
-    r.innerHTML = `<div class="ok">✅ Proven! Tx ${tx.hash}</div>`;
-  } catch (e) { r.innerHTML = '<div class="warn">'+e
+    r.innerHTML = `<div class="ok">✅ Proven! Tx ${tx.hash}<br>Come back in 7 days to Finalize</div>`;
+  } catch (e) { r.innerHTML = '<div class="warn">'+e.message+'</div>'; }
+};
+
+document.getElementById('finalizeBtn').onclick = async () => {
+  const r = document.getElementById('actionResult');
+  try {
+    r.innerHTML = '<div class="warn">Finalizing... Confirm in MetaMask</div>';
+    const m = await getMessenger();
+    const tx = await m.finalizeMessage(currentTxHash);
+    r.innerHTML = `<div class="ok">Finalize sent: ${tx.hash}</div>`;
+    await tx.wait();
+    r.innerHTML = `<div class="ok">✅ Finalized! ETH is back on Mainnet</div>`;
+  } catch (e) { r.innerHTML = '<div class="warn">'+e.message+'</div>'; }
+};
+</script>
+</body>
+</html>
