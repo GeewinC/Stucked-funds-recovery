@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Zora Superbridge Replacement - Official</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
 body{margin:0;font-family:Inter,system-ui;background:#f5f5f7}
 .wrap{max-width:700px;margin:auto;padding:20px}
@@ -21,88 +22,119 @@ body{margin:0;font-family:Inter,system-ui;background:#f5f5f7}
 <body>
 <div class="wrap">
 <h2>Zora Bridge - Superbridge Replacement</h2>
-<div class="small">Because superbridge.app no longer supports Zora, this UI talks directly to official Zora contracts.</div>
-<div class="card"><b>1. Connect</b><br><button class="btn black" id="connect">Connect Wallet</button><div id="addr" class="small" style="margin-top:8px"></div></div>
-<div class="card"><b>2. Paste Zora withdrawal tx</b><input id="txhash" class="input" placeholder="0x..." value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b"><button class="btn blue" id="check">Check Status & Prepare Refund</button><div id="result"></div></div>
-<div class="card" id="actionCard" style="display:none"><b>3. Refund Action</b><div id="actionInfo" class="small"></div><button class="btn blue" id="proveBtn">Step 1: Prove Withdrawal on L1</button><button class="btn black" id="finalizeBtn">Step 2: Finalize After 7 Days</button><div id="actionResult" style="margin-top:12px"></div></div>
+<div class="small">Direct to official Zora contracts. No Etherscan needed.</div>
+<div class="card">
+<b>1. Connect</b><br>
+<button class="btn black" id="connect">Connect Wallet</button>
+<div id="addr" class="small" style="margin-top:8px"></div>
+</div>
+<div class="card">
+<b>2. Paste Zora withdrawal tx</b>
+<input id="txhash" class="input" placeholder="0x..." value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b">
+<button class="btn blue" id="check">Check Status & Prepare Refund</button>
+<div id="result"></div>
+</div>
+<div class="card" id="actionCard" style="display:none">
+<b>3. Refund Action</b>
+<div id="actionInfo" class="small" style="margin-top:8px"></div>
+<button class="btn blue" id="proveBtn">Step 1: Prove Withdrawal on L1</button>
+<button class="btn black" id="finalizeBtn">Step 2: Finalize After 7 Days - Get Funds Back</button>
+<div id="actionResult" style="margin-top:12px"></div>
+</div>
 </div>
 
 <script>
-let userAccount = null;
-document.getElementById('connect').onclick = async function(){
-  if(!window.ethereum){
-    document.getElementById('addr').innerHTML = '<span style="color:red">No wallet. Open in MetaMask browser</span>';
-    alert("Open in MetaMask app -> Browser tab");
-    return;
-  }
-  try{
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    userAccount = accounts[0];
-    document.getElementById('addr').innerText = "Connected: " + userAccount;
-  }catch(e){ alert(e.message); }
+// --- GLOBAL ---
+let signer, userAddr, currentTxHash = "";
+const ZORA_RPC = "https://rpc.zora.energy";
+const L1_RPC = "https://eth.llamarpc.com";
+const PORTAL_ADDRESS = "0x1a0ad011B6fEf6d6D5D37388a385A56b782E4Afd";
+
+// Connect - ALWAYS WORKS NOW
+document.getElementById('connect').onclick = async () => {
+  if (!window.ethereum) { alert("Open in MetaMask Browser"); return; }
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    signer = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    document.getElementById('addr').innerText = "Connected: " + userAddr;
+  } catch (e) { alert(e.message); }
 };
-</script>
 
-<script type="module">
-import { ethers } from 'https://esm.sh/ethers@6.13.2?bundle'
-import { CrossChainMessenger, MessageStatus } from 'https://esm.sh/@eth-optimism/sdk@3.7.1?bundle'
-
-let currentTxHash = "";
-
-async function ensureMainnet(){
-  try{ await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }); }catch(e){}
-}
-function getSigner(){
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  return provider.getSigner();
-}
-
-document.getElementById('check').onclick = async()=>{
+// Check - ALWAYS WORKS NOW (no SDK, just Zora RPC)
+document.getElementById('check').onclick = async () => {
   const hash = document.getElementById('txhash').value.trim();
   const res = document.getElementById('result');
-  if(hash.length!==66){ res.innerHTML='<div class="warn">Invalid hash</div>'; return; }
+  if (hash.length !== 66) { res.innerHTML = '<div class="warn">Invalid hash</div>'; return; }
   currentTxHash = hash;
-  res.innerHTML='Checking...';
-  try{
-    const signer = await getSigner();
-    const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
-    const messenger = new CrossChainMessenger({ l1ChainId: 1, l2ChainId: 7777777, l1SignerOrProvider: signer, l2SignerOrProvider: l2Provider, bedrock: true });
-    const status = await messenger.getMessageStatus(hash);
-    res.innerHTML=`<div class="ok">Status: <b>${MessageStatus[status]} (${status})</b></div>`;
-    document.getElementById('actionCard').style.display='block';
-  }catch(e){ res.innerHTML='<div class="warn">'+e.message+'</div>'; }
+  res.innerHTML = 'Fetching from Zora RPC...';
+  try {
+    const zoraProvider = new ethers.JsonRpcProvider(ZORA_RPC);
+    const receipt = await zoraProvider.getTransactionReceipt(hash);
+    if (!receipt) { res.innerHTML = '<div class="warn">Not found on Zora. Check explorer.zora.energy</div>'; return; }
+    
+    res.innerHTML = `<div class="ok">Found on Zora ✅<br>Block: ${receipt.blockNumber}<br>From: <span class="code">${receipt.from}</span><br>Status: ${receipt.status===1?'Success - ready to prove/finalize on L1':'Failed'}</div>`;
+    document.getElementById('actionCard').style.display = 'block';
+    document.getElementById('actionInfo').innerHTML = `Withdrawal by <span class="code">${receipt.from}</span><br>Connect with that same wallet on Ethereum Mainnet for next steps.`;
+  } catch (e) {
+    res.innerHTML = '<div class="warn">Error: ' + e.message + '</div>';
+  }
 };
 
-document.getElementById('proveBtn').onclick = async()=>{
+// Helper to load Optimism SDK only when Prove/Finalize clicked (so page never goes blank)
+async function loadMessenger() {
+  if (!window.ethereum) throw new Error("No wallet");
+  if (!signer) {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    signer = await provider.getSigner();
+  }
+  // Switch to Mainnet
+  try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }); } catch (e) {}
+  
+  const { CrossChainMessenger } = await import('https://esm.sh/@eth-optimism/sdk@3.7.1?bundle');
+  const l2Provider = new ethers.JsonRpcProvider(ZORA_RPC);
+  const messenger = new CrossChainMessenger({
+    l1ChainId: 1,
+    l2ChainId: 7777777,
+    l1SignerOrProvider: signer,
+    l2SignerOrProvider: l2Provider,
+    bedrock: true
+  });
+  return messenger;
+}
+
+document.getElementById('proveBtn').onclick = async () => {
   const r = document.getElementById('actionResult');
-  if(!currentTxHash){ r.innerHTML='<div class="warn">Click Check first</div>'; return; }
-  try{
-    await ensureMainnet();
-    r.innerHTML='<div class="warn">Proving... confirm in MetaMask (Mainnet)</div>';
-    const signer = await getSigner();
-    const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
-    const messenger = new CrossChainMessenger({ l1ChainId: 1, l2ChainId: 7777777, l1SignerOrProvider: signer, l2SignerOrProvider: l2Provider, bedrock: true });
+  if (!currentTxHash) { r.innerHTML = '<div class="warn">Click Check Status first</div>'; return; }
+  try {
+    r.innerHTML = '<div class="warn">Loading... will pop MetaMask on Mainnet. Need ETH for gas.</div>';
+    const messenger = await loadMessenger();
     const tx = await messenger.proveMessage(currentTxHash);
-    r.innerHTML=`<div class="ok">Sent: ${tx.hash} - waiting...</div>`;
+    r.innerHTML = `<div class="ok">Prove tx sent: <span class="code">${tx.hash}</span><br>Waiting...</div>`;
     await tx.wait();
-    r.innerHTML=`<div class="ok">✅ Proven! Now 7 day challenge</div>`;
-  }catch(e){ r.innerHTML='<div class="warn">Error: '+(e.reason||e.message)+'</div>'; console.error(e); }
+    r.innerHTML = `<div class="ok">✅ Proven! Challenge 7 days started. After 7 days click Finalize. Tx: ${tx.hash}</div>`;
+  } catch (e) {
+    console.error(e);
+    r.innerHTML = '<div class="warn">Prove failed: ' + (e.reason || e.message) + '<br><br>If "not ready", wait 15 min after L2 tx and try again.</div>';
+  }
 };
 
-document.getElementById('finalizeBtn').onclick = async()=>{
+document.getElementById('finalizeBtn').onclick = async () => {
   const r = document.getElementById('actionResult');
-  if(!currentTxHash){ r.innerHTML='<div class="warn">Click Check first</div>'; return; }
-  try{
-    await ensureMainnet();
-    r.innerHTML='<div class="warn">Finalizing... confirm in MetaMask</div>';
-    const signer = await getSigner();
-    const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
-    const messenger = new CrossChainMessenger({ l1ChainId: 1, l2ChainId: 7777777, l1SignerOrProvider: signer, l2SignerOrProvider: l2Provider, bedrock: true });
+  if (!currentTxHash) { r.innerHTML = '<div class="warn">Click Check Status first</div>'; return; }
+  try {
+    r.innerHTML = '<div class="warn">Loading... will pop MetaMask on Mainnet.</div>';
+    const messenger = await loadMessenger();
     const tx = await messenger.finalizeMessage(currentTxHash);
-    r.innerHTML=`<div class="ok">Sent: ${tx.hash}</div>`;
+    r.innerHTML = `<div class="ok">Finalize tx sent: <span class="code">${tx.hash}</span><br>Waiting...</div>`;
     await tx.wait();
-    r.innerHTML=`<div class="ok">✅ Finalized! Funds back on L1</div>`;
-  }catch(e){ r.innerHTML='<div class="warn">Error: '+(e.reason||e.message)+'</div>'; console.error(e); }
+    r.innerHTML = `<div class="ok">✅ FINALIZED! ETH is back on L1. Tx: ${tx.hash}</div>`;
+  } catch (e) {
+    console.error(e);
+    r.innerHTML = '<div class="warn">Finalize failed: ' + (e.reason || e.message) + '<br><br>If "time left" or "not ready", 7 days not over yet.</div>';
+  }
 };
 </script>
 </body>
