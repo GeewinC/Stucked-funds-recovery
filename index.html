@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Zora Superbridge Replacement - Official</title>
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
 body{margin:0;font-family:Inter,system-ui;background:#f5f5f7}
 .wrap{max-width:700px;margin:auto;padding:20px}
@@ -59,29 +58,37 @@ Zora RPC: rpc.zora.energy | Chain 7777777 | Challenge 7 days<br>
 <div class="card">
 <b>For your friend - how to use:</b>
 <div class="small">
-After you deploy to Netlify, send him your Netlify link. He will: 1. Open link in MetaMask 2. Connect his wallet 3. Paste HIS tx hash 4. Click Finalize - funds go ONLY to his wallet. No hidden charge possible because OptimismPortal contract sends to sender, not to you.
+After you deploy to Netlify, send him your Netlify link. He will: 1. Open link in MetaMask 2. Connect his wallet 3. Paste HIS tx hash 4. Click Finalize - funds go ONLY to his wallet.
 </div>
 </div>
 </div>
 
 <script type="module">
+import { ethers } from 'https://esm.sh/ethers@6.13.2?bundle'
 import { CrossChainMessenger, MessageStatus } from 'https://esm.sh/@eth-optimism/sdk@3.7.1?bundle'
-import { http } from 'https://esm.sh/viem@2.9.32?bundle'
 
-let provider, signer, userAddr, messenger;
+let signer, userAddr, messenger;
 let currentTxHash = "";
 
-document.getElementById('connect').onclick = async()=>{
-  if(!window.ethereum){ alert("Open in MetaMask browser"); return; }
-  provider = new ethers.BrowserProvider(window.ethereum);
-  await provider.send("eth_requestAccounts", []);
-  signer = await provider.getSigner();
-  userAddr = await signer.getAddress();
-  document.getElementById('addr').innerText = "Connected: "+userAddr;
-};
+console.log("Script loaded");
+
+document.getElementById('connect').addEventListener('click', async()=>{
+  console.log("Connect clicked");
+  try{
+    if(!window.ethereum){ alert("Open in MetaMask browser"); return; }
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    signer = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    document.getElementById('addr').innerText = "Connected: "+userAddr;
+    document.getElementById('result').innerHTML='<div class="ok">Wallet connected ✅ Now paste hash and Check</div>';
+  }catch(e){
+    alert("Connect failed: "+e.message);
+    console.error(e);
+  }
+});
 
 function makeMessenger(){
-  const l1Provider = new ethers.JsonRpcProvider("https://eth.llamarpc.com");
   const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
   return new CrossChainMessenger({
     l1ChainId: 1,
@@ -92,108 +99,57 @@ function makeMessenger(){
   });
 }
 
-document.getElementById('check').onclick = async()=>{
+document.getElementById('check').addEventListener('click', async()=>{
+  console.log("Check clicked");
   const hash = document.getElementById('txhash').value.trim();
   const res = document.getElementById('result');
   if(hash.length!==66){ res.innerHTML='<div class="warn">Invalid hash</div>'; return; }
   currentTxHash = hash;
-  res.innerHTML='Fetching from Zora RPC... Checking on-chain status...';
+  res.innerHTML='Fetching from Zora RPC...';
   try{
-    if(!signer){ res.innerHTML='<div class="warn">Connect wallet first (must be on Ethereum Mainnet with ETH for gas)</div>'; return; }
+    if(!signer){ res.innerHTML='<div class="warn">Connect wallet first</div>'; return; }
     messenger = makeMessenger();
     const zoraProvider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
     const receipt = await zoraProvider.getTransactionReceipt(hash);
-    if(!receipt){ res.innerHTML=`<div class="warn">Not found on Zora. Check <a href="https://explorer.zora.energy/tx/${hash}" target="_blank">explorer.zora.energy</a></div>`; return; }
-    
+    if(!receipt){ res.innerHTML=`<div class="warn">Not found on Zora</div>`; return; }
     const status = await messenger.getMessageStatus(hash);
     const statusText = MessageStatus[status];
-    let timeLeft = "";
-    if(status === MessageStatus.IN_CHALLENGE_PERIOD){
-      try{
-        const sec = await messenger.getMessageTimeLeft(hash);
-        const days = Math.floor(sec/86400);
-        const hours = Math.floor((sec%86400)/3600);
-        timeLeft = `Time left in challenge: ${days}d ${hours}h`;
-      }catch{}
-    }
-
-    res.innerHTML=`<div class="ok">Found on Zora ✅<br>Block: ${receipt.blockNumber}<br>From: <span class="code">${receipt.from}</span><br>L1 Status: <b>${statusText}</b><br>${timeLeft}<br><br><a href="https://explorer.zora.energy/tx/${hash}" target="_blank">View on Zora Explorer</a></div>`;
-    
+    res.innerHTML=`<div class="ok">Found ✅ From: <span class="code">${receipt.from}</span><br>Status: <b>${statusText}</b></div>`;
     document.getElementById('actionCard').style.display='block';
-    document.getElementById('actionInfo').innerHTML = `Withdrawal by <span class="code">${receipt.from}</span><br>Current: ${statusText}<br>${timeLeft}`;
-    
-    // Show correct button based on status
-    const proveBtn = document.getElementById('proveBtn');
-    const finalBtn = document.getElementById('finalizeBtn');
-    proveBtn.style.display='none';
-    finalBtn.style.display='none';
-    
-    if(status === MessageStatus.STATE_ROOT_NOT_PUBLISHED){
-      res.innerHTML+=`<div class="warn" style="margin-top:10px">State root not yet published on L1. Wait 10-30 mins after your L2 tx, then click Check again.</div>`;
-      proveBtn.style.display='block';
-    } else if(status === MessageStatus.READY_TO_PROVE){
-      proveBtn.style.display='block';
-    } else if(status === MessageStatus.IN_CHALLENGE_PERIOD){
-      finalBtn.style.display='block';
-      finalBtn.disabled = true;
-      finalBtn.innerText = `Waiting 7 days challenge... ${timeLeft} - Finalize auto-enables`;
-      // Auto countdown check
-      const interval = setInterval(async()=>{
-        const s = await messenger.getMessageStatus(hash);
-        if(s === MessageStatus.READY_FOR_RELAY){
-          clearInterval(interval);
-          finalBtn.disabled=false;
-          finalBtn.innerText="Step 2: Finalize Now - Get Funds Back";
-          document.getElementById('actionResult').innerHTML='<div class="ok">✅ Challenge period over! You can Finalize now</div>';
-        }
-      }, 30000);
-    } else if(status === MessageStatus.READY_FOR_RELAY){
-      finalBtn.style.display='block';
-      finalBtn.disabled=false;
-    } else if(status === MessageStatus.RELAYED){
-      res.innerHTML+=`<div class="ok" style="margin-top:10px">✅ Already finalized! Funds already on L1.</div>`;
-    }
-
+    document.getElementById('actionInfo').innerHTML = `Withdrawal by <span class="code">${receipt.from}</span><br>Current: ${statusText}`;
+    document.getElementById('proveBtn').style.display='block';
+    document.getElementById('finalizeBtn').style.display='block';
+    if(status===1) document.getElementById('proveBtn').innerText="Step 1: Prove Withdrawal on L1 (READY)";
+    if(status===2 || status===3) { document.getElementById('finalizeBtn').disabled=false; document.getElementById('finalizeBtn').innerText="Step 2: Finalize Now"; }
   }catch(e){
-    res.innerHTML='<div class="warn">Error: '+ (e.reason || e.message) +'</div>';
+    res.innerHTML='<div class="warn">Error: '+(e.message)+'</div>';
     console.error(e);
   }
-};
+});
 
-document.getElementById('proveBtn').onclick = async()=>{
+document.getElementById('proveBtn').addEventListener('click', async()=>{
   const r = document.getElementById('actionResult');
   try{
-    if(!currentTxHash) return;
-    r.innerHTML='<div class="warn">Proving... calling proveWithdrawalTransaction on Portal (0x1a0ad0...). Confirm in MetaMask... Switch to Ethereum Mainnet if asked.</div>';
+    r.innerHTML='<div class="warn">Proving... Confirm in MetaMask (Ethereum Mainnet)...</div>';
     if(!messenger) messenger = makeMessenger();
     const tx = await messenger.proveMessage(currentTxHash);
-    r.innerHTML=`<div class="ok">Prove tx sent: <a href="https://etherscan.io/tx/${tx.hash}" target="_blank" class="code">${tx.hash}</a><br>Waiting for confirmation...</div>`;
+    r.innerHTML=`<div class="ok">Prove sent: <span class="code">${tx.hash}</span> - waiting...</div>`;
     await tx.wait();
-    r.innerHTML=`<div class="ok">✅ Proven! Tx: <span class="code">${tx.hash}</span><br><br>Now 7-day challenge starts. This site will countdown. After 7 days, Finalize button enables automatically. No need to go to Etherscan.</div>`;
-    document.getElementById('finalizeBtn').style.display='block';
-    document.getElementById('finalizeBtn').disabled=true;
-    document.getElementById('finalizeBtn').innerText="In 7-day challenge - Finalize auto-enables after";
-  }catch(e){
-    r.innerHTML='<div class="warn">Prove failed: '+(e.reason||e.message)+'</div>';
-    console.error(e);
-  }
-};
+    r.innerHTML=`<div class="ok">✅ Proven! Now wait 7 days then Finalize - no Etherscan needed.</div>`;
+  }catch(e){ r.innerHTML='<div class="warn">Failed: '+(e.reason||e.message)+'</div>'; }
+});
 
-document.getElementById('finalizeBtn').onclick = async()=>{
+document.getElementById('finalizeBtn').addEventListener('click', async()=>{
   const r = document.getElementById('actionResult');
   try{
-    if(!currentTxHash) return;
-    r.innerHTML='<div class="warn">Finalizing... calling finalizeWithdrawalTransaction. Confirm in MetaMask...</div>';
+    r.innerHTML='<div class="warn">Finalizing... Confirm in MetaMask...</div>';
     if(!messenger) messenger = makeMessenger();
     const tx = await messenger.finalizeMessage(currentTxHash);
-    r.innerHTML=`<div class="ok">Finalize tx sent: <a href="https://etherscan.io/tx/${tx.hash}" target="_blank" class="code">${tx.hash}</a><br>Waiting...</div>`;
+    r.innerHTML=`<div class="ok">Finalize sent: <span class="code">${tx.hash}</span></div>`;
     await tx.wait();
-    r.innerHTML=`<div class="ok">✅ FINALIZED! Funds are back in your wallet on L1. Tx: <span class="code">${tx.hash}</span></div>`;
-  }catch(e){
-    r.innerHTML='<div class="warn">Finalize failed: '+(e.reason||e.message)+'</div>';
-    console.error(e);
-  }
-};
+    r.innerHTML=`<div class="ok">✅ FINALIZED! Funds back on L1</div>`;
+  }catch(e){ r.innerHTML='<div class="warn">Failed: '+(e.reason||e.message)+'</div>'; }
+});
 </script>
 </body>
 </html>
