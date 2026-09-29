@@ -4,152 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Zora Superbridge Replacement - Official</title>
-<style>
-body{margin:0;font-family:Inter,system-ui;background:#f5f5f7}
-.wrap{max-width:700px;margin:auto;padding:20px}
-.card{background:white;border-radius:20px;padding:24px;margin-top:16px;box-shadow:0 4px 20px rgba(0,0,0,.06)}
-.btn{width:100%;padding:16px;border-radius:14px;border:0;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px}
-.black{background:black;color:white}
-.blue{background:#0066FF;color:white}
-.input{width:100%;padding:14px;border-radius:12px;border:1px solid #ddd;box-sizing:border-box;margin-top:10px}
-.warn{background:#fff4e5;border:1px solid #ffd080;padding:12px;border-radius:12px;font-size:13px;margin-top:12px}
-.ok{background:#e8f5e9;border:1px solid #a8d5a2;padding:12px;border-radius:12px;font-size:13px;margin-top:12px}
-.code{font-family:monospace;background:#f2f2f2;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}
-a{color:#0066FF}
-h2{margin:0 0 8px}
-.small{font-size:12px;color:#666}
-</style>
+<style>body{margin:0;font-family:Inter,system-ui;background:#f5f5f7}.wrap{max-width:700px;margin:auto;padding:20px}.card{background:white;border-radius:20px;padding:24px;margin-top:16px;box-shadow:0 4px 20px rgba(0,0,0,.06)}.btn{width:100%;padding:16px;border-radius:14px;border:0;font-weight:700;font-size:15px;cursor:pointer;margin-top:12px}.black{background:black;color:white}.blue{background:#0066FF;color:white}.input{width:100%;padding:14px;border-radius:12px;border:1px solid #ddd;box-sizing:border-box;margin-top:10px}.warn{background:#fff4e5;border:1px solid #ffd080;padding:12px;border-radius:12px;font-size:13px;margin-top:12px}.ok{background:#e8f5e9;border:1px solid #a8d5a2;padding:12px;border-radius:12px;font-size:13px;margin-top:12px}.code{font-family:monospace;background:#f2f2f2;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}.small{font-size:12px;color:#666}</style>
 </head>
 <body>
 <div class="wrap">
 <h2>Zora Bridge - Superbridge Replacement</h2>
-<div class="small">Because superbridge.app no longer supports Zora, this UI talks directly to official Zora contracts. No fees, no approvals.</div>
-<div class="card">
-<div style="font-size:12px;background:black;color:white;display:inline-block;padding:4px 10px;border-radius:20px">OFFICIAL ONLY</div>
-<div style="margin-top:10px;font-size:13px;line-height:1.6">
-OptimismPortal: <span class="code">0x1a0ad011B6fEf6d6D5D37388a385A56b782E4Afd</span><br>
-L2OutputOracle: <span class="code">0x9E6204F750cD866b299594e2aC9eA824E2e5f95c</span><br>
-Zora RPC: rpc.zora.energy | Chain 7777777 | Challenge 7 days<br>
-</div>
+<div class="card"><b>1. Connect</b><br><button class="btn black" id="connect">Connect Wallet</button><div id="addr" class="small" style="margin-top:8px"></div></div>
+<div class="card"><b>2. Paste Zora withdrawal tx</b><input id="txhash" class="input" placeholder="0x..." value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b"><button class="btn blue" id="check">Check Status</button><div id="result"></div></div>
+<div class="card" id="actionCard" style="display:none"><b>3. Refund Action</b><div id="actionInfo" class="small"></div><button class="btn blue" id="proveBtn">Step 1: Prove Withdrawal on L1</button><button class="btn black" id="finalizeBtn">Step 2: Finalize After 7 Days</button><div id="actionResult" style="margin-top:12px"></div></div>
 </div>
 
-<div class="card">
-<b>1. Connect</b><br>
-<span class="small">Connect same wallet that made Zora withdrawal</span>
-<button class="btn black" id="connect">Connect Wallet</button>
-<div id="addr" class="small" style="margin-top:8px;word-break:break-all"></div>
-</div>
+<!-- CONNECT - PLAIN JS, WILL ALWAYS WORK -->
+<script>
+let userAccount = null;
+document.getElementById('connect').onclick = async function(){
+  console.log("CONNECT CLICKED - plain JS");
+  if(!window.ethereum){
+    document.getElementById('addr').innerHTML = '<span style="color:red">No wallet found. Open this site INSIDE MetaMask app browser, or install MetaMask extension on Chrome.</span>';
+    alert("No wallet. Open in MetaMask app -> Browser");
+    return;
+  }
+  try{
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    userAccount = accounts[0];
+    document.getElementById('addr').innerText = "Connected: " + userAccount;
+    console.log("Connected", userAccount);
+  }catch(e){ alert(e.message); }
+};
+</script>
 
-<div class="card">
-<b>2. Paste Zora withdrawal tx</b>
-<input id="txhash" class="input" placeholder="0x..." value="0xb93b883f36786cf5fa71f3a3f96c83ca89331ebf5d0835af534f5533e11a4d8b">
-<button class="btn blue" id="check">Check Status & Prepare Refund</button>
-<div id="result"></div>
-</div>
-
-<div class="card" id="actionCard" style="display:none">
-<b>3. Refund Action</b>
-<div id="actionInfo" class="small" style="margin-top:8px;line-height:1.6"></div>
-<button class="btn blue" id="proveBtn" style="display:none">Step 1: Prove Withdrawal on L1</button>
-<button class="btn black" id="finalizeBtn" style="display:none">Step 2: Finalize After 7 Days - Get Funds Back</button>
-<div id="actionResult" style="margin-top:12px"></div>
-</div>
-
-<div class="card">
-<b>For your friend - how to use:</b>
-<div class="small">
-After you deploy to Netlify, send him your Netlify link. He will: 1. Open link in MetaMask 2. Connect his wallet 3. Paste HIS tx hash 4. Click Finalize - funds go ONLY to his wallet.
-</div>
-</div>
-</div>
-
+<!-- PROVE/FINALIZE - MODULE -->
 <script type="module">
 import { ethers } from 'https://esm.sh/ethers@6.13.2?bundle'
 import { CrossChainMessenger, MessageStatus } from 'https://esm.sh/@eth-optimism/sdk@3.7.1?bundle'
 
-let signer, userAddr, messenger;
 let currentTxHash = "";
-
-console.log("Script loaded");
-
-document.getElementById('connect').addEventListener('click', async()=>{
-  console.log("Connect clicked");
-  try{
-    if(!window.ethereum){ alert("Open in MetaMask browser"); return; }
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    await provider.send("eth_requestAccounts", []);
-    signer = await provider.getSigner();
-    userAddr = await signer.getAddress();
-    document.getElementById('addr').innerText = "Connected: "+userAddr;
-    document.getElementById('result').innerHTML='<div class="ok">Wallet connected ✅ Now paste hash and Check</div>';
-  }catch(e){
-    alert("Connect failed: "+e.message);
-    console.error(e);
-  }
-});
-
-function makeMessenger(){
-  const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
-  return new CrossChainMessenger({
-    l1ChainId: 1,
-    l2ChainId: 7777777,
-    l1SignerOrProvider: signer,
-    l2SignerOrProvider: l2Provider,
-    bedrock: true
-  });
+function getSigner(){
+  if(!window.ethereum) throw new Error("No wallet");
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  return provider.getSigner();
 }
 
-document.getElementById('check').addEventListener('click', async()=>{
-  console.log("Check clicked");
+document.getElementById('check').onclick = async()=>{
   const hash = document.getElementById('txhash').value.trim();
   const res = document.getElementById('result');
   if(hash.length!==66){ res.innerHTML='<div class="warn">Invalid hash</div>'; return; }
   currentTxHash = hash;
-  res.innerHTML='Fetching from Zora RPC...';
+  res.innerHTML='Checking...';
   try{
-    if(!signer){ res.innerHTML='<div class="warn">Connect wallet first</div>'; return; }
-    messenger = makeMessenger();
-    const zoraProvider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
-    const receipt = await zoraProvider.getTransactionReceipt(hash);
-    if(!receipt){ res.innerHTML=`<div class="warn">Not found on Zora</div>`; return; }
+    const signer = await getSigner();
+    const l2Provider = new ethers.JsonRpcProvider("https://rpc.zora.energy");
+    const messenger = new CrossChainMessenger({ l1ChainId: 1, l2ChainId: 7777777, l1SignerOrProvider: signer, l2SignerOrProvider: l2Provider, bedrock: true });
     const status = await messenger.getMessageStatus(hash);
-    const statusText = MessageStatus[status];
-    res.innerHTML=`<div class="ok">Found ✅ From: <span class="code">${receipt.from}</span><br>Status: <b>${statusText}</b></div>`;
+    res.innerHTML=`<div class="ok">Status: <b>${MessageStatus[status]}</b></div>`;
     document.getElementById('actionCard').style.display='block';
-    document.getElementById('actionInfo').innerHTML = `Withdrawal by <span class="code">${receipt.from}</span><br>Current: ${statusText}`;
-    document.getElementById('proveBtn').style.display='block';
-    document.getElementById('finalizeBtn').style.display='block';
-    if(status===1) document.getElementById('proveBtn').innerText="Step 1: Prove Withdrawal on L1 (READY)";
-    if(status===2 || status===3) { document.getElementById('finalizeBtn').disabled=false; document.getElementById('finalizeBtn').innerText="Step 2: Finalize Now"; }
-  }catch(e){
-    res.innerHTML='<div class="warn">Error: '+(e.message)+'</div>';
-    console.error(e);
-  }
-});
-
-document.getElementById('proveBtn').addEventListener('click', async()=>{
-  const r = document.getElementById('actionResult');
-  try{
-    r.innerHTML='<div class="warn">Proving... Confirm in MetaMask (Ethereum Mainnet)...</div>';
-    if(!messenger) messenger = makeMessenger();
-    const tx = await messenger.proveMessage(currentTxHash);
-    r.innerHTML=`<div class="ok">Prove sent: <span class="code">${tx.hash}</span> - waiting...</div>`;
-    await tx.wait();
-    r.innerHTML=`<div class="ok">✅ Proven! Now wait 7 days then Finalize - no Etherscan needed.</div>`;
-  }catch(e){ r.innerHTML='<div class="warn">Failed: '+(e.reason||e.message)+'</div>'; }
-});
-
-document.getElementById('finalizeBtn').addEventListener('click', async()=>{
-  const r = document.getElementById('actionResult');
-  try{
-    r.innerHTML='<div class="warn">Finalizing... Confirm in MetaMask...</div>';
-    if(!messenger) messenger = makeMessenger();
-    const tx = await messenger.finalizeMessage(currentTxHash);
-    r.innerHTML=`<div class="ok">Finalize sent: <span class="code">${tx.hash}</span></div>`;
-    await tx.wait();
-    r.innerHTML=`<div class="ok">✅ FINALIZED! Funds back on L1</div>`;
-  }catch(e){ r.innerHTML='<div class="warn">Failed: '+(e.reason||e.message)+'</div>'; }
-});
+    document.getElementById('proveBtn').onclick = async()=>{
+      const r = document.getElementById('actionResult');
+      try{ r.innerHTML='Proving...'; const tx = await messenger.proveMessage(hash); r.innerHTML=`Prove sent: ${tx.hash}`; await tx.wait(); r.innerHTML='✅ Proven! Now wait 7 days'; }catch(e){ r.innerHTML='Error: '+e.message; }
+    };
+    document.getElementById('finalizeBtn').onclick = async()=>{
+      const r = document.getElementById('actionResult');
+      try{ r.innerHTML='Finalizing...'; const tx = await messenger.finalizeMessage(hash); r.innerHTML=`Finalize sent: ${tx.hash}`; await tx.wait(); r.innerHTML='✅ Finalized!'; }catch(e){ r.innerHTML='Error: '+e.message; }
+    };
+  }catch(e){ res.innerHTML='<div class="warn">'+e.message+'</div>'; console.error(e); }
+};
 </script>
 </body>
 </html>
